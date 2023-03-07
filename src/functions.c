@@ -1,7 +1,26 @@
+#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include "internals/functions.h"
+
+static struct
+{
+    function_callback_t func_ptr;
+    char *func_name;
+} func_table[] = {
+    {(function_callback_t)memory_dump, "mem_dump"},
+    {(function_callback_t)write_byte, "s_u8"},
+    {(function_callback_t)write_halfword, "s_u16"},
+    {(function_callback_t)write_word, "s_u32"},
+    {(function_callback_t)write_func, "mem_write"},
+    {(function_callback_t)read_byte, "r_u8"},
+    {(function_callback_t)read_halfword, "r_u16"},
+    {(function_callback_t)read_word, "r_u32"},
+    {(function_callback_t)resolve_symbol, "r"},
+    {(function_callback_t)run_func, "c"}};
 
 char *memory_dump(char *args)
 {
@@ -9,33 +28,23 @@ char *memory_dump(char *args)
     char *arg = NULL;
     if ((arg = strtok(args, " ")) != NULL)
     {
-        char *char_ptr = strstr(arg, "0x");
-        int base = 10;
-        if (char_ptr != NULL)
-        {
-            arg = char_ptr + 2;
-            base = 16;
-        }
-        void *ptr = (void *)strtoul(arg, &char_ptr, base);
+        char *char_ptr = NULL;
+        int base = 0;
+        void *ptr = NULL;
+        sscanf(args, "%p", &ptr);
         if ((arg = strtok(NULL, " ")) != NULL)
         {
-            char_ptr = strstr(arg, "0x");
-            int base = 10;
-            if (char_ptr != NULL)
-            {
-                arg = char_ptr + 2;
-                base = 16;
-            }
-            unsigned int count = (void *)strtoul(arg, &char_ptr, base);
+            unsigned int count = 0;
+            sscanf(arg, "%d", &count);
             int size = snprintf(NULL, 0, "%p:", ptr);
             result = (char *)calloc(size, sizeof(char));
             sprintf(result, "%p:", ptr);
-            for (; ptr <= (ptr + count); ptr++)
+            for (void *curr_ptr = ptr; curr_ptr < (ptr + count * (sizeof(void *))); curr_ptr += sizeof(void *))
             {
-                char curr_size = snprintf(NULL, 0, "0x%x", *((unsigned int *)ptr));
+                char curr_size = snprintf(NULL, 0, " 0x%x", *((unsigned int *)curr_ptr));
                 char curr_buff[curr_size];
                 memset(curr_buff, 0, curr_size);
-                sprintf(curr_buff, " 0x%x", *((unsigned int *)ptr));
+                sprintf(curr_buff, " 0x%x", *((unsigned int *)curr_ptr));
                 size += curr_size;
                 result = (char *)realloc(result, size);
                 strcat(result, curr_buff);
@@ -57,14 +66,12 @@ char *memory_dump(char *args)
 static inline void *get_ptr_from_string(char *ptr_string)
 {
     void *result = NULL;
-    char *char_ptr = strstr(ptr_string, "0x");
-    int base = 10;
-    if (char_ptr != NULL)
+    int base = 0;
+    sscanf(ptr_string, "%p", &result);
+    if (result == NULL)
     {
-        ptr_string = char_ptr + 2;
-        base = 16;
+        sscanf(ptr_string, "%d", &result);
     }
-    result = (void *)strtoul(ptr_string, &char_ptr, base);
     if (result == NULL)
     {
         // lets try by symbol
@@ -86,17 +93,44 @@ char *write_byte(char *args)
     char *arg2 = strtok(NULL, " ");
     if (arg2 != NULL)
     {
-        char *char_ptr = strstr(arg2, "0x");
-        int base = 10;
-        if (char_ptr != NULL)
-        {
-            arg1 = char_ptr + 2;
-            base = 16;
-        }
-        val = (unsigned char)strtoul(arg2, &char_ptr, base);
+        char *char_ptr = NULL;
+        sscanf(arg2, "%hhu", &val);
         if (ptr != NULL)
         {
             *((unsigned char *)ptr) = val;
+            result = strdup("Write success");
+        }
+        else
+        {
+            result = strdup("Pointer is invalid");
+        }
+    }
+    else
+    {
+        result = strdup("Value is absent");
+    }
+    return result;
+}
+
+char *write_halfword(char *args)
+{
+    char *result = NULL;
+    void *ptr = NULL;
+    char *arg1 = strtok(args, " ");
+    if (arg1 != NULL)
+    {
+        ptr = get_ptr_from_string(arg1);
+    }
+    unsigned short val = 0;
+    char *arg2 = strtok(NULL, " ");
+    if (arg2 != NULL)
+    {
+        char *char_ptr = NULL;
+        int base = 0;
+        val = (unsigned short)strtoul(arg2, &char_ptr, base);
+        if (ptr != NULL)
+        {
+            *((unsigned short *)ptr) = val;
             result = strdup("Write success");
         }
         else
@@ -120,21 +154,16 @@ char *write_word(char *args)
     {
         ptr = get_ptr_from_string(arg1);
     }
-    unsigned int val = 0;
+    unsigned long val = 0;
     char *arg2 = strtok(NULL, " ");
     if (arg2 != NULL)
     {
-        char *char_ptr = strstr(arg2, "0x");
-        int base = 10;
-        if (char_ptr != NULL)
-        {
-            arg2 = char_ptr + 2;
-            base = 16;
-        }
-        val = (unsigned int)strtoul(arg2, &char_ptr, base);
+        char *char_ptr = NULL;
+        int base = 0;
+        val = (unsigned long)strtoul(arg2, &char_ptr, base);
         if (ptr != NULL)
         {
-            *((unsigned int *)ptr) = val;
+            *((unsigned long *)ptr) = val;
             result = strdup("Write success");
         }
         else
@@ -158,21 +187,16 @@ char *write_func(char *args)
     {
         ptr = get_ptr_from_string(arg);
     }
-    unsigned int *mem = NULL;
+    unsigned char *mem = NULL;
     int size = 0;
     while ((arg = strtok(NULL, " ")) != NULL)
     {
-        mem = (unsigned int *)realloc(mem, ++size * sizeof(unsigned int));
+        mem = (unsigned long *)realloc(mem, ++size * sizeof(unsigned char));
         if (mem == NULL)
             break;
-        char *char_ptr = strstr(arg, "0x");
-        int base = 10;
-        if (char_ptr != NULL)
-        {
-            arg = char_ptr + 2;
-            base = 16;
-        }
-        unsigned long val = (unsigned int)strtoul(arg, &char_ptr, base);
+        char *char_ptr = NULL;
+        int base = 0;
+        unsigned long val = (unsigned long)strtoul(arg, &char_ptr, base);
         if (mem != NULL)
         {
             mem[size - 1] = val;
@@ -187,8 +211,47 @@ char *write_func(char *args)
     {
         memmove(ptr, mem, size);
         free(mem);
-        result = strdup("Write success");
+        result = (char *)calloc(snprintf(NULL, 0, "Writed %d bytes at address %p", size, ptr), sizeof(char));
+        sprintf(result, "Writed %d bytes at address %p", size, ptr);
     }
+    return result;
+}
+
+char *read_byte(char *args)
+{
+    char *result = NULL;
+    void *ptr = NULL;
+    char *arg = strtok(args, " ");
+    if (arg != NULL)
+    {
+        ptr = get_ptr_from_string(arg);
+    }
+    unsigned char val = *((unsigned char *)ptr);
+    size_t str_len = snprintf(NULL, 0, "%p: %hhu", ptr, val);
+    result = (char *)calloc(str_len, sizeof(char));
+    if (result != NULL)
+        sprintf(result, "%p: 0x%x", ptr, val);
+    else
+        result = strdup("Failed to read data");
+    return result;
+}
+
+char *read_halfword(char *args)
+{
+    char *result = NULL;
+    void *ptr = NULL;
+    char *arg = strtok(args, " ");
+    if (arg != NULL)
+    {
+        ptr = get_ptr_from_string(arg);
+    }
+    unsigned short val = *((unsigned short *)ptr);
+    size_t str_len = snprintf(NULL, 0, "%p: 0x%x", ptr, val);
+    result = (char *)calloc(str_len, sizeof(char));
+    if (result != NULL)
+        sprintf(result, "%p: 0x%x", ptr, val);
+    else
+        result = strdup("Failed to read data");
     return result;
 }
 
@@ -201,11 +264,11 @@ char *read_word(char *args)
     {
         ptr = get_ptr_from_string(arg);
     }
-    unsigned int val = *((unsigned int *)ptr);
-    size_t str_len = snprintf(NULL, 0, "%p %x", ptr, val);
+    unsigned long val = *((unsigned long *)ptr);
+    size_t str_len = snprintf(NULL, 0, "%p: 0x%x", ptr, val);
     result = (char *)calloc(str_len, sizeof(char));
     if (result != NULL)
-        sprintf(result, "%p %x", ptr, val);
+        sprintf(result, "%p: 0x%x", ptr, val);
     else
         result = strdup("Failed to read data");
     return result;
@@ -214,9 +277,17 @@ char *read_word(char *args)
 char *resolve_symbol(char *args)
 {
     char *result = NULL;
-    void *ptr = dlsym(NULL, args);
-    result = (char *)calloc(snprintf(NULL, 0, "%p", ptr), sizeof(char));
-    sprintf(result, "%p", ptr);
+    void *handle = dlopen(NULL, RTLD_GLOBAL | RTLD_NOW);
+    void *ptr = dlsym(handle, args);
+#ifdef TEST
+    if (ptr == NULL)
+    {
+        fprintf(stderr, "dlerror is %s\n", dlerror());
+    }
+#endif
+    dlclose(handle);
+    result = (char *)calloc(snprintf(NULL, 0, "%s: %p", args, ptr), sizeof(char));
+    sprintf(result, "%s: %p", args, ptr);
     return result;
 }
 
@@ -241,6 +312,20 @@ char *run_func(char *args)
     else
     {
         result = strdup("Function execution failed!");
+    }
+    return result;
+}
+
+function_callback_t get_func_by_name(char *name)
+{
+    function_callback_t result = NULL;
+    for (int i = 0; i < ARRAY_SIZE(func_table); i++)
+    {
+        if (!strcmp(name, func_table[i].func_name))
+        {
+            result = func_table[i].func_ptr;
+            break;
+        }
     }
     return result;
 }

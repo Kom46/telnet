@@ -21,15 +21,8 @@ typedef enum
 
 function_callback_t process_function_request(char **args)
 {
-    function_callback_t result = (function_callback_t)NULL;
     char *func_name = strtok(*args, " ");
-    for (int i = 0; i < ARRAY_SIZE(func_table); i++)
-    {
-        if (strcmp(func_table[i].func_name, func_name) == 0)
-        {
-            result = func_table[i].func_ptr;
-        }
-    }
+    function_callback_t result = get_func_by_name(func_name);
     return result;
 }
 
