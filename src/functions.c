@@ -288,16 +288,36 @@ char *read_byte(char *args)
     if (arg != NULL)
     {
         ptr = get_ptr_from_string(arg);
+        if (strstr(arg, "0x") != NULL)
+        {
+            mode = ADDR;
+        }
+        else
+        {
+            mode = SYM;
+        }
     }
     unsigned char val = 0;
     if (ptr != NULL)
     {
         val = *((unsigned char *)ptr);
-        size_t str_len = snprintf(NULL, 0, "%s(%p) = %hhu", arg, ptr, val);
+        size_t str_len = snprintf(NULL, 0, "%s(%p) = 0x%x", arg, ptr, val);
         result = (char *)calloc(str_len, sizeof(char));
     }
     if (result != NULL)
-        sprintf(result, "%p: 0x%x", ptr, val);
+    {
+        switch (mode)
+        {
+        case SYM:
+            sprintf(result, "%s(%p) = 0x%02x", arg, ptr, val);
+            break;
+        case ADDR:
+            sprintf(result, "%p = 0x%02x", ptr, val);
+            break;
+        default:
+            break;
+        }
+    }
     else
         result = strdup("Failed to read data");
     return result;
@@ -308,15 +328,36 @@ char *read_halfword(char *args)
     char *result = NULL;
     void *ptr = NULL;
     char *arg = strtok(args, " ");
+    enum emode mode = 0;
     if (arg != NULL)
     {
         ptr = get_ptr_from_string(arg);
+        if (strstr(arg, "0x") != NULL)
+        {
+            mode = ADDR;
+        }
+        else
+        {
+            mode = SYM;
+        }
     }
     unsigned short val = *((unsigned short *)ptr);
-    size_t str_len = snprintf(NULL, 0, "%p: 0x%x", ptr, val);
+    size_t str_len = snprintf(NULL, 0, "%s(%p) = 0x%04x", arg, ptr, val);
     result = (char *)calloc(str_len, sizeof(char));
     if (result != NULL)
-        sprintf(result, "%p: 0x%x", ptr, val);
+    {
+        switch (mode)
+        {
+        case SYM:
+            sprintf(result, "%s(%p) = 0x%04x", arg, ptr, val);
+            break;
+        case ADDR:
+            sprintf(result, "%p = 0x%04x", ptr, val);
+            break;
+        default:
+            break;
+        }
+    }
     else
         result = strdup("Failed to read data");
     return result;
@@ -327,15 +368,36 @@ char *read_word(char *args)
     char *result = NULL;
     void *ptr = NULL;
     char *arg = strtok(args, " ");
+    enum emode mode = 0;
     if (arg != NULL)
     {
         ptr = get_ptr_from_string(arg);
+        if (strstr(arg, "0x") != NULL)
+        {
+            mode = ADDR;
+        }
+        else
+        {
+            mode = SYM;
+        }
     }
     unsigned long val = *((unsigned long *)ptr);
-    size_t str_len = snprintf(NULL, 0, "%p: 0x%x", ptr, val);
+    size_t str_len = snprintf(NULL, 0, "%s(%p) = 0x%08x", arg, ptr, val);
     result = (char *)calloc(str_len, sizeof(char));
     if (result != NULL)
-        sprintf(result, "%p: 0x%x", ptr, val);
+    {
+        switch (mode)
+        {
+        case SYM:
+            sprintf(result, "%s(%p) = 0x%08x", arg, ptr, val);
+            break;
+        case ADDR:
+            sprintf(result, "%p = 0x%08x", ptr, val);
+            break;
+        default:
+            break;
+        }
+    }
     else
         result = strdup("Failed to read data");
     return result;
