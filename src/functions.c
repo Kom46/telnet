@@ -66,6 +66,14 @@ char *memory_dump(char *args)
 {
     char *result = NULL;
     char *arg = NULL;
+#define EIGHT_CELLS_PATTERN "0x%02x, 0x%02x, 0x%02x, 0x%02x 0x%02x, 0x%02x, 0x%02x, 0x%02x, // %c%c%c%c%c%c%c%c\r\n"
+#define ONE_SELL_PATTERN ", 0x%02x // %c%c%c%c%c%c%c\r\n,"
+#define EIHT_SELL_DATA(data, i) data[(i)], data[(i) + 1], data[(i) + 2], data[(i) + 3], data[(i) + 4], data[(i) + 5], \
+                                data[(i) + 6], data[(i) + 7]
+#define CHAR_PRINT(a) ((a) >= 32 ? a : ' ')
+#define EIGHT_CHAR_PRINT(data, i) CHAR_PRINT(data[(i)]), CHAR_PRINT(data[(i) + 1]), CHAR_PRINT(data[(i + 2)]),     \
+                                  CHAR_PRINT(data[(i) + 3]), CHAR_PRINT(data[(i) + 4]), CHAR_PRINT(data[(i) + 5]), \
+                                  CHAR_PRINT(data[(i) + 6]), CHAR_PRINT(data[(i) + 7])
     if ((arg = strtok(args, " ")) != NULL)
     {
         char *char_ptr = NULL;
@@ -80,29 +88,28 @@ char *memory_dump(char *args)
             memcpy(mem, ptr, count);
             // calculate size
             size_t size = 0;
-            size += snprintf(NULL, 0, "0x%02x, 0x%02x, 0x%02x, 0x%02x// %c%c%c%c\r\n", 00, 00, 00, 00, 'a', 'a', 'a', 'a') * (count / 4);
-            size += (snprintf(NULL, 0, " 0x%02x,", 00) * count % 4) + snprintf(NULL, 0, " // %c%c%c%c", 'a', 'a', 'a', 'a');
+            size += snprintf(NULL, 0, EIGHT_CELLS_PATTERN, 0, 0, 0, 0, 0, 0, 0, 0, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a') * (count / 4);
+            size += (snprintf(NULL, 0, " 0x%02x,", 00) * count % 4) + snprintf(NULL, 0, " // %c%c%c%c%c%c%c", 'a', 'a', 'a', 'a');
             // for final \r\n
             size += 2;
             result = (char *)calloc(size, sizeof(char));
             int counter = count;
-            for (int i = 0; i < count; i += 4)
+            for (int i = 0; i < count; i += 8)
             {
 
-                if (counter >= 4)
+                if (counter >= 8)
                 {
-                    char tmp[snprintf(NULL, 0, "0x%02x, 0x%02x, 0x%02x, 0x%02x, // %c%c%c%c\r\n",
-                                      00, 00, 00, 00, 'a', 'a', 'a', 'a')];
-                    sprintf(tmp, "0x%02x, 0x%02x, 0x%02x, 0x%02x, // \r\n", mem[i], mem[i + 1], mem[i + 2], mem[i + 3]);
+                    char tmp[snprintf(NULL, 0, EIGHT_CELLS_PATTERN)];
+                    sprintf(tmp, EIGHT_CELLS_PATTERN, EIHT_SELL_DATA(mem, i), EIGHT_CHAR_PRINT(mem, i));
                     strcat(result, tmp);
                 }
                 else
                 {
-                    for (size_t j = 0; j < (count % 4); j++)
+                    for (size_t j = 0; j < (count % 8); j++)
                     {
-                        char tmp[snprintf(NULL, 0, ", 0x%02x // %c%c%c%c\r\n,", 00, 'a', 'a', 'a', 'a')];
-                        static char tmp2[3] = {0};
-                        tmp2[j] = (char)mem[i + j];
+                        char tmp[snprintf(NULL, 0, ONE_SELL_PATTERN)];
+                        static char tmp2[7] = {0};
+                        tmp2[j] = CHAR_PRINT(mem[i + j]);
                         if (j == 0)
                         {
                             sprintf(tmp, "0x%02x", mem[i + j]);
@@ -111,15 +118,15 @@ char *memory_dump(char *args)
                         {
                             sprintf(tmp, ", 0x%02x", mem[i + j]);
                         }
-                        if (j == ((count % 4) - 1))
+                        if (j == ((count % 8) - 1))
                         {
-                            // sprintf(tmp, "%s // %s", tmp, tmp2);
+                            sprintf(tmp, "%s // %s", tmp, tmp2);
                             strcat(tmp, "\r\n");
                         }
                         strcat(result, tmp);
                     }
                 }
-                counter -= 4;
+                counter -= 8;
             }
         }
         else
@@ -428,9 +435,10 @@ char *resolve_function(char *args)
         if (ptr != NULL)
         {
             result = (char *)calloc(snprintf(NULL, 0, "symbol '%s' located at %s within the program %s",
-                                                args, info.dli_fname, info.dli_sname ?: "NULL"), sizeof(char));
+                                             args, info.dli_fname, info.dli_sname ?: "NULL"),
+                                    sizeof(char));
             sprintf(result, "symbol '%s' located at %s within the program %s",
-                                        args, info.dli_fname, info.dli_sname ?: "NULL");
+                    args, info.dli_fname, info.dli_sname ?: "NULL");
         }
         else
             sprintf(tmp, "symbol");
@@ -620,10 +628,10 @@ char *run_func(char *args)
     {
         char *sep_args[MAX_ARGS] = {0};
         int args_count = 0;
-        arg = strchr(arg, '(');
+        // arg = strchr(arg, '(');
         for (size_t i = 0; i < MAX_ARGS; i++)
         {
-            if ((arg = strtok(NULL, ",")) != NULL)
+            if ((arg = strtok(NULL, ",()")) != NULL)
             {
                 sep_args[i] = strdup(arg);
                 char *tmp = strchr(sep_args[i], ')');
@@ -649,6 +657,14 @@ char *run_func(char *args)
             {
                 func_type.one_arg_fn |= (1 << 0UL);
             }
+            else
+            {
+                char *tmp = NULL;
+                while ((tmp = strchr(sep_args[0], '\"')) != NULL)
+                {
+                    memmove(tmp, tmp + 1, strlen(tmp) + 1);
+                }
+            }
             switch (func_type.one_arg_fn)
             {
             case FUNC_L:
@@ -667,6 +683,14 @@ char *run_func(char *args)
                 if (!strstr(sep_args[i], "\""))
                 {
                     func_type.two_arg_fn |= (1 << i);
+                }
+                else
+                {
+                    char *tmp = NULL;
+                    while ((tmp = strchr(sep_args[i], '\"')) != NULL)
+                    {
+                        memmove(tmp, tmp + 1, strlen(tmp) + 1);
+                    }
                 }
             }
             switch (func_type.two_arg_fn)
@@ -693,6 +717,14 @@ char *run_func(char *args)
                 if (!strstr(sep_args[i], "\""))
                 {
                     func_type.three_arg_fn |= (1 << i);
+                }
+                else
+                {
+                    char *tmp = NULL;
+                    while ((tmp = strchr(sep_args[i], '\"')) != NULL)
+                    {
+                        memmove(tmp, tmp + 1, strlen(tmp) + 1);
+                    }
                 }
             }
             switch (func_type.three_arg_fn)
@@ -738,6 +770,14 @@ char *run_func(char *args)
                 if (!strstr(sep_args[i], "\""))
                 {
                     func_type.four_arg_fn |= (1 << i);
+                }
+                else
+                {
+                    char *tmp = NULL;
+                    while ((tmp = strchr(sep_args[i], '\"')) != NULL)
+                    {
+                        memmove(tmp, tmp + 1, strlen(tmp) + 1);
+                    }
                 }
             }
             switch (func_type.four_arg_fn)
@@ -811,6 +851,13 @@ char *run_func(char *args)
                 if (!strstr(sep_args[i], "\""))
                 {
                     func_type.five_arg_fn |= (1 << i);
+                    char *tmp = NULL;
+                    while ((tmp = strchr(sep_args[i], '\"')) != NULL)
+                    {
+                        // if (tmp == sep_args[i]) {
+                        memmove(tmp, tmp + 1, strlen(tmp) + 1);
+                        // }
+                    }
                 }
             }
             switch (func_type.five_arg_fn)
