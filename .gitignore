@@ -3,3 +3,5 @@ telnet.so
 .vscode
 *.o
 build
+libdebug.so
+test/test_server

@@ -1,10 +1,12 @@
 // #define TEST
 #ifdef TEST
 
+#define _GNU_SOURCE
 #include "unity.h"
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <dlfcn.h>
 
 #include "internals/functions.h"
 
@@ -153,14 +155,36 @@ EXPORT_API int foo(void)
 void test_resolve_symbol(void)
 {
     char *symbol_name = "malloc";
-    int (*fn)(void);
-    fn = &malloc;
+    void *fn = &malloc;
     char request[snprintf(NULL, 0, "%s", symbol_name)];
     sprintf(request, "%s", symbol_name);
-    char response[snprintf(NULL, 0, "%s: %p", symbol_name, fn)];
-    sprintf(response, "%s: %p", symbol_name, fn);
+    char response[snprintf(NULL, 0, "symbol '%s' at %p", symbol_name, fn)];
+    sprintf(response, "symbol '%s' at %p", symbol_name, fn);
     char *result = resolve_symbol(request);
     TEST_ASSERT_EQUAL_STRING(response, result);
+    printf("%s\n", result);
+    free(result);
+    void *ptr = dlsym(NULL, symbol_name);
+    Dl_info info = {0};
+    dladdr(ptr, &info);
+    char response2[snprintf(NULL, 0, 
+    "Address '%p' located at %s within the program %s", ptr, info.dli_fname, info.dli_sname ?: "NULL")];
+    sprintf(response2, "Address '%p' located at %s within the program %s", 
+            ptr, info.dli_fname, info.dli_sname ?: "NULL");
+    char request2[snprintf(NULL, 0, "%p", (void *)fn)];
+    sprintf(request2, "%p", (void *)fn);
+    result = resolve_symbol(request2);
+    TEST_ASSERT_EQUAL_STRING(response2, result);
+    printf("%s",result);
+    free(result);
+    char str[] = {0};
+    symbol_name = "test_resolve_symbol";
+    result = resolve_symbol(symbol_name);
+    char response3[snprintf(NULL, 0, "symbol '%s' at %p", symbol_name, test_resolve_symbol)];
+    sprintf(response3, "symbol '%s' at %p", symbol_name, test_resolve_symbol);
+    result = resolve_symbol(symbol_name);
+    TEST_ASSERT_EQUAL_STRING(response3, result);
+    printf("%s\n", result);
     free(result);
 }
 
@@ -177,6 +201,12 @@ void test_run_func(void)
     sprintf(request, "%p", &bar);
     char *result = run_func(request);
     TEST_ASSERT_EQUAL(new_val, a);
+    printf("%s\n", result);
+    free(result);
+    char request2[snprintf(NULL, 0, "%s(%d,%d)", "calloc", "10", "1")];
+    sprintf(request2, "%s(%d,%d)", "calloc", 10, 1);
+    result = run_func(request2);
+    printf("%s\n", result);
     free(result);
 }
 

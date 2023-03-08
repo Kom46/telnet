@@ -19,14 +19,33 @@ typedef enum
     RESPONSE
 } STATES;
 
-function_callback_t process_function_request(char **args)
+static function_callback_t process_function_request(char **args)
 {
-    char *func_name = strtok(*args, " ");
-    function_callback_t result = get_func_by_name(func_name);
+    char *result = NULL;
+    char *first_arg = strtok(*args, " ");
+    char *second_arg = NULL;
+    if (strstr(first_arg, "mem")) {
+        second_arg = strtok(*args, " ");
+    }
+    if(strstr(first_arg, "r") || strstr(first_arg, "w")) {
+        if (strstr(*args, "u8") || strstr(*args, "u16") || strstr(*args, "u32")) {
+            second_arg = strtok(*args, " ");
+        }
+    }
+    char func_name[snprintf(NULL, 0, "%s_%s", first_arg, second_arg == NULL ? 
+                                                                "" : second_arg)];
+    sprintf(func_name, "%s", first_arg);
+    if (second_arg != NULL)
+    {
+        sprintf(func_name, "%s_%s",first_arg, second_arg);
+    }
+    
+    function_callback_t func = get_func_by_name(func_name);
+    result = func(*args);
     return result;
 }
 
-char *run_state_machine(STATES *state, char *args)
+static char *run_state_machine(STATES *state, char *args)
 {
     char *result = NULL;
     switch (*state)
@@ -34,7 +53,7 @@ char *run_state_machine(STATES *state, char *args)
     case REQUEST:
         if (args != NULL)
         {
-            result = process_function_request(args)(args);
+            result = process_function_request(&args);
             *state = RESPONSE;
         }
         break;
@@ -148,7 +167,7 @@ static void client_function(void *arg)
     pthread_exit((void *)0);
 }
 
-int init_server(void)
+int init_telnet_server(void)
 {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {.sin_addr.s_addr = INADDR_ANY,
@@ -161,7 +180,7 @@ int init_server(void)
     if (bind(sock, (void *)&addr, sizeof(addr)))
         perror("binding tcp socket");
     if (listen(sock, 1) == -1)
-        perro("listen");
+        perror("listen");
     int client_sock = -1;
     struct sockaddr client_sock_addr = {0};
     while (client_sock = accept(sock, &client_sock_addr, sizeof(client_sock_addr))) {

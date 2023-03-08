@@ -1,14 +1,14 @@
 CC    = gcc
 FLAGS        = -std=gnu11
-CFLAGS       = -fPIC -g -pedantic -Wall -Wextra -ggdb3 -shared
+CFLAGS       = -fPIC -g -pedantic -Wall -Wextra -ggdb
 LDFLAGS      = -shared -ldl -lpthread
 
-DEBUGFLAGS   = -O0 -D _DEBUG
+DEBUGFLAGS   = -O0
 RELEASEFLAGS = -O2
 
 MODE ?= DEBUG
 
-TARGET  = telnet.so
+TARGET  = libdebug.so
 SOURCES = $(wildcard src/*.c)
 SOURCES += $(wildcard external_libs/ring_buffer/*.c)
 INC = -Iinc -Iexternal_libs
@@ -25,11 +25,15 @@ endif
 all: $(TARGET)
 
 %.o : %.c
-	@echo  $(FLAGS)
-	$(CC) $(FLAGS) $(CFLAGS) $(INC) -o  $@ $^
+	$(CC) $(FLAGS) $(CFLAGS) $(INC) -c -o  $@ $^
 
 clean:
 	rm -rf $(OBJECTS) $(TARGET)
+
+test: $(TARGET)
+	rm -rf test/test_server test/test_server
+	$(CC) $(FLAGS) $(CFLAGS) $(INC) -c -o test/test_server.o test/test_server.c
+	$(CC) $(FLAGS) -L$(TARGET) -L./ -ldebug -o test/test_server test/test_server.o
 
 $(TARGET):$(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $^

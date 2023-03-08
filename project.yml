@@ -88,13 +88,13 @@
   :relese_compiler:
     :executable: "gcc"
     :arguments: 
-      - "-Wl"
-      - "--export-dynamic"
+      - "-c"
+      - "-fPIC"
   :relese_linker:
     :executable: "gcc"
     :arguments:
-      - "-Wl"
-      - "--export-dynamic"
+      - "-fPIC"
+      
 # LIBRARIES
 # These libraries are automatically injected into the build process. Those specified as
 # common will be used in all types of builds. Otherwise, libraries can be injected in just
