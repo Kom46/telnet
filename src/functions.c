@@ -152,7 +152,7 @@ char *write_byte(char *args)
         ptr = get_ptr_from_string(arg1);
     }
     unsigned char val = 0;
-    char *arg2 = strtok(NULL, " ");
+    char *arg2 = strtok(NULL, " = ");
     if (arg2 != NULL)
     {
         char *char_ptr = NULL;
@@ -184,7 +184,7 @@ char *write_halfword(char *args)
         ptr = get_ptr_from_string(arg1);
     }
     unsigned short val = 0;
-    char *arg2 = strtok(NULL, " ");
+    char *arg2 = strtok(NULL, " = ");
     if (arg2 != NULL)
     {
         char *char_ptr = NULL;
@@ -211,13 +211,13 @@ char *write_word(char *args)
 {
     char *result = NULL;
     void *ptr = NULL;
-    char *arg1 = strtok(args, " ");
+    char *arg1 = strtok(args, " = ");
     if (arg1 != NULL)
     {
         ptr = get_ptr_from_string(arg1);
     }
     unsigned long val = 0;
-    char *arg2 = strtok(NULL, " ");
+    char *arg2 = strtok(NULL, " = ");
     if (arg2 != NULL)
     {
         char *char_ptr = NULL;
