@@ -8,16 +8,17 @@
 
 #ifndef TEST
 // functions for telnet communication
-    char * memory_dump(char *args);
-    char * write_byte(char *args);
-    char * write_halfword(char *args);
-    char * write_word(char *args);
-    char * write_func(char *args);
-    char * read_byte(char *args);
-    char * read_halfword(char *args);
-    char * read_word(char *args);
-    char * resolve_symbol(char *args);
-    char * run_func(char *args);
+char *memory_dump(char *args);
+char *write_byte(char *args);
+char *write_halfword(char *args);
+char *write_word(char *args);
+char *write_func(char *args);
+char *read_byte(char *args);
+char *read_halfword(char *args);
+char *read_word(char *args);
+char *resolve_symbol(char *args);
+char *resolve_function(char *args);
+char *run_func(char *args);
 #endif
 
 static enum emode {
@@ -32,55 +33,15 @@ static struct
 } func_table[] = {
     {(function_callback_t)memory_dump, "mem_dump"},
     {(function_callback_t)write_func, "mem_write"},
-    {(function_callback_t)write_byte, "s_u8"},
-    {(function_callback_t)write_halfword, "s_u16"},
-    {(function_callback_t)write_word, "s_u32"},
+    {(function_callback_t)write_byte, "w_u8"},
+    {(function_callback_t)write_halfword, "w_u16"},
+    {(function_callback_t)write_word, "w_u32"},
     {(function_callback_t)read_byte, "r_u8"},
     {(function_callback_t)read_halfword, "r_u16"},
     {(function_callback_t)read_word, "r_u32"},
-    {(function_callback_t)resolve_symbol, "r"},
+    {(function_callback_t)resolve_symbol, "s"},
+    {(function_callback_t)resolve_function, "r"},
     {(function_callback_t)run_func, "c"}};
-
-char *memory_dump(char *args)
-{
-    char *result = NULL;
-    char *arg = NULL;
-    if ((arg = strtok(args, " ")) != NULL)
-    {
-        char *char_ptr = NULL;
-        int base = 0;
-        void *ptr = NULL;
-        sscanf(args, "%p", &ptr);
-        if ((arg = strtok(NULL, " ")) != NULL)
-        {
-            unsigned int count = 0;
-            sscanf(arg, "%d", &count);
-            int size = snprintf(NULL, 0, "%p:", ptr);
-            result = (char *)calloc(size, sizeof(char));
-            sprintf(result, "%p:", ptr);
-            for (void *curr_ptr = ptr; curr_ptr < (ptr + count * (sizeof(void *))); curr_ptr += sizeof(void *))
-            {
-                char curr_size = snprintf(NULL, 0, " 0x%x", *((unsigned int *)curr_ptr));
-                char curr_buff[curr_size];
-                memset(curr_buff, 0, curr_size);
-                sprintf(curr_buff, " 0x%x", *((unsigned int *)curr_ptr));
-                size += curr_size;
-                result = (char *)realloc(result, size);
-                strcat(result, curr_buff);
-            }
-        }
-        else
-        {
-            result = strdup("Wrong args to function!");
-        }
-    }
-    else
-    {
-        result = strdup("Wrong args to function!");
-    }
-
-    return result;
-}
 
 static inline void *get_ptr_from_string(char *ptr_string)
 {
@@ -101,6 +62,79 @@ static inline void *get_ptr_from_string(char *ptr_string)
     return result;
 }
 
+char *memory_dump(char *args)
+{
+    char *result = NULL;
+    char *arg = NULL;
+    if ((arg = strtok(args, " ")) != NULL)
+    {
+        char *char_ptr = NULL;
+        int base = 0;
+        void *ptr = NULL;
+        ptr = get_ptr_from_string(args);
+        if ((ptr != NULL) && ((arg = strtok(NULL, " ")) != NULL))
+        {
+            unsigned int count = 0;
+            sscanf(arg, "%d", &count);
+            unsigned char mem[count];
+            memcpy(mem, ptr, count);
+            // calculate size
+            size_t size = 0;
+            size += snprintf(NULL, 0, "0x%02x, 0x%02x, 0x%02x, 0x%02x// %c%c%c%c\r\n", 00, 00, 00, 00, 'a', 'a', 'a', 'a') * (count / 4);
+            size += (snprintf(NULL, 0, " 0x%02x,", 00) * count % 4) + snprintf(NULL, 0, " // %c%c%c%c", 'a', 'a', 'a', 'a');
+            // for final \r\n
+            size += 2;
+            result = (char *)calloc(size, sizeof(char));
+            int counter = count;
+            for (int i = 0; i < count; i += 4)
+            {
+
+                if (counter >= 4)
+                {
+                    char tmp[snprintf(NULL, 0, "0x%02x, 0x%02x, 0x%02x, 0x%02x, // %c%c%c%c\r\n",
+                                      00, 00, 00, 00, 'a', 'a', 'a', 'a')];
+                    sprintf(tmp, "0x%02x, 0x%02x, 0x%02x, 0x%02x, // \r\n", mem[i], mem[i + 1], mem[i + 2], mem[i + 3]);
+                    strcat(result, tmp);
+                }
+                else
+                {
+                    for (size_t j = 0; j < (count % 4); j++)
+                    {
+                        char tmp[snprintf(NULL, 0, ", 0x%02x // %c%c%c%c\r\n,", 00, 'a', 'a', 'a', 'a')];
+                        static char tmp2[3] = {0};
+                        tmp2[j] = (char)mem[i + j];
+                        if (j == 0)
+                        {
+                            sprintf(tmp, "0x%02x", mem[i + j]);
+                        }
+                        else
+                        {
+                            sprintf(tmp, ", 0x%02x", mem[i + j]);
+                        }
+                        if (j == ((count % 4) - 1))
+                        {
+                            // sprintf(tmp, "%s // %s", tmp, tmp2);
+                            strcat(tmp, "\r\n");
+                        }
+                        strcat(result, tmp);
+                    }
+                }
+                counter -= 4;
+            }
+        }
+        else
+        {
+            result = strdup("Wrong args to function!");
+        }
+    }
+    else
+    {
+        result = strdup("Wrong args to function!");
+    }
+
+    return result;
+}
+
 char *write_byte(char *args)
 {
     char *result = NULL;
@@ -115,7 +149,7 @@ char *write_byte(char *args)
     if (arg2 != NULL)
     {
         char *char_ptr = NULL;
-        sscanf(arg2, "%hhu", &val);
+        val = (unsigned char)strtoul(arg2, NULL, 0);
         if (ptr != NULL)
         {
             *((unsigned char *)ptr) = val;
@@ -247,9 +281,13 @@ char *read_byte(char *args)
     {
         ptr = get_ptr_from_string(arg);
     }
-    unsigned char val = *((unsigned char *)ptr);
-    size_t str_len = snprintf(NULL, 0, "%p: %hhu", ptr, val);
-    result = (char *)calloc(str_len, sizeof(char));
+    unsigned char val = 0;
+    if (ptr != NULL)
+    {
+        val = *((unsigned char *)ptr);
+        size_t str_len = snprintf(NULL, 0, "%p: %hhu", ptr, val);
+        result = (char *)calloc(str_len, sizeof(char));
+    }
     if (result != NULL)
         sprintf(result, "%p: 0x%x", ptr, val);
     else
@@ -309,7 +347,53 @@ char *resolve_symbol(char *args)
     }
     else
     {
-        ptr = dlsym(NULL, args);
+        ptr = dlsym(handle, args);
+        mode = SYM;
+    }
+    if (ptr != NULL)
+    {
+        dladdr(ptr, &info);
+    }
+
+#ifdef TEST
+    if (ptr == NULL)
+    {
+        fprintf(stderr, "dlerror is %s\n", dlerror());
+    }
+#endif
+    dlclose(handle);
+    char tmp[8] = {0};
+    if (ptr != NULL)
+    {
+        result = (char *)calloc(snprintf(NULL, 0, "symbol '%s' at %p", args, ptr), sizeof(char));
+        sprintf(result, "symbol '%s' at %p", args, ptr);
+    }
+    else
+        sprintf(tmp, "symbol");
+    if (result == NULL)
+    {
+        result = (char *)calloc(snprintf(NULL, 0, "%s %s could not be resolved\r\n", tmp, args), sizeof(char));
+        sprintf(result, "%s %s could not be resolved", tmp, args);
+    }
+
+    return result;
+}
+
+char *resolve_function(char *args)
+{
+    char *result = NULL;
+    Dl_info info = {0};
+    void *handle = dlopen(NULL, RTLD_GLOBAL | RTLD_NOW);
+    void *ptr = NULL;
+    enum emode mode = 0;
+    if (strstr(args, "0x"))
+    {
+        ptr = (void *)strtoul(args, NULL, 0);
+        mode = ADDR;
+    }
+    else
+    {
+        ptr = dlsym(handle, args);
         mode = SYM;
     }
     if (ptr != NULL)
@@ -330,8 +414,7 @@ char *resolve_symbol(char *args)
     case ADDR:
         if (ptr != NULL)
         {
-            result = (char *)calloc(snprintf(NULL, 0, "Address '%p' located at %s within the \
-                                program %s",
+            result = (char *)calloc(snprintf(NULL, 0, "Address '%p' located at %s within the program %s",
                                              ptr, info.dli_fname, info.dli_sname ?: "NULL"),
                                     sizeof(char));
             sprintf(result, "Address '%p' located at %s within the program %s",
@@ -343,8 +426,10 @@ char *resolve_symbol(char *args)
     case SYM:
         if (ptr != NULL)
         {
-            result = (char *)calloc(snprintf(NULL, 0, "symbol '%s' at %p", args, ptr), sizeof(char));
-            sprintf(result, "symbol '%s' at %p", args, ptr);
+            result = (char *)calloc(snprintf(NULL, 0, "symbol '%s' located at %s within the program %s",
+                                                args, info.dli_fname, info.dli_sname ?: "NULL"), sizeof(char));
+            sprintf(result, "symbol '%s' located at %s within the program %s",
+                                        args, info.dli_fname, info.dli_sname ?: "NULL");
         }
         else
             sprintf(tmp, "symbol");
@@ -354,7 +439,7 @@ char *resolve_symbol(char *args)
     }
     if (result == NULL)
     {
-        result = (char *)calloc(snprintf(NULL, 0, "%s %s could not be resolved", tmp, args), sizeof(char));
+        result = (char *)calloc(snprintf(NULL, 0, "%s %s could not be resolved\r\n", tmp, args), sizeof(char));
         sprintf(result, "%s %s could not be resolved", tmp, args);
     }
 
@@ -889,7 +974,7 @@ char *run_func(char *args)
             break;
         case SYM:
             result = (char *)calloc(snprintf(NULL, 0,
-                                             "func '%s' at %p returned 0x%x",name, (void *)ptr.fn, retval),
+                                             "func '%s' at %p returned 0x%x", name, (void *)ptr.fn, retval),
                                     sizeof(char));
             sprintf(result, "func '%s' at %p returned 0x%x", name, (void *)ptr.fn, retval);
             free(name);

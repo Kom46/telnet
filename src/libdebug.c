@@ -5,12 +5,14 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <string.h>
 
 #include "ring_buffer/ringbuffer.h"
 #include "internals/functions.h"
 
 #define MAX_REQUEST_LEN 1024
 #define MAX_FAIL_COUNT 10
+#define MAX_CONNECTIONS 10
 #define PORT 5555
 
 typedef enum
@@ -19,29 +21,57 @@ typedef enum
     RESPONSE
 } STATES;
 
-static function_callback_t process_function_request(char **args)
+static char *process_function_request(char *args)
 {
     char *result = NULL;
-    char *first_arg = strtok(*args, " ");
+    char *first_arg = strtok(args, " ");
     char *second_arg = NULL;
-    if (strstr(first_arg, "mem")) {
-        second_arg = strtok(*args, " ");
+    char *suffix = NULL;
+
+    if (first_arg == NULL)
+    {
+        return result;
     }
-    if(strstr(first_arg, "r") || strstr(first_arg, "w")) {
-        if (strstr(*args, "u8") || strstr(*args, "u16") || strstr(*args, "u32")) {
-            second_arg = strtok(*args, " ");
+
+    if (strstr(first_arg, "mem"))
+    {
+        suffix = strtok(NULL, " ");
+    }
+    if (strstr(first_arg, "r") || strstr(first_arg, "w"))
+    {
+        second_arg = strtok(NULL, " ");
+
+        if (second_arg != NULL && (strstr(second_arg, "u8") || strstr(second_arg, "u16") || strstr(second_arg, "u32")))
+        {
+            suffix = second_arg;
+            second_arg = NULL;
         }
     }
-    char func_name[snprintf(NULL, 0, "%s_%s", first_arg, second_arg == NULL ? 
-                                                                "" : second_arg)];
+    char func_name[snprintf(NULL, 0, "%s_%s", first_arg, suffix == NULL ? "" : suffix)];
     sprintf(func_name, "%s", first_arg);
-    if (second_arg != NULL)
+    if (suffix != NULL)
     {
-        sprintf(func_name, "%s_%s",first_arg, second_arg);
+        sprintf(func_name, "%s_%s", first_arg, suffix);
     }
-    
+
     function_callback_t func = get_func_by_name(func_name);
-    result = func(*args);
+    if (func != NULL)
+    {
+        if (second_arg == NULL)
+        {
+            size_t len = strlen(first_arg) + 1;
+            if (suffix != NULL)
+            {
+                len += strlen(suffix) + 1;
+            }
+            second_arg = &args[len];
+        }
+        for (char *ptr = strchr(second_arg, '\r'); ptr != NULL; ptr = strchr(second_arg, '\r'))
+            *ptr = '\0';
+        for (char *ptr = strchr(second_arg, '\n'); ptr != NULL; ptr = strchr(second_arg, '\n'))
+            *ptr = '\0';
+        result = func(second_arg);
+    }
     return result;
 }
 
@@ -53,8 +83,9 @@ static char *run_state_machine(STATES *state, char *args)
     case REQUEST:
         if (args != NULL)
         {
-            result = process_function_request(&args);
-            *state = RESPONSE;
+            result = process_function_request(args);
+            if (result != NULL)
+                *state = RESPONSE;
         }
         break;
     case RESPONSE:
@@ -86,8 +117,13 @@ static void client_function(void *arg)
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
         FD_ZERO(&except_fds);
+
+        FD_SET(sock, &read_fds);
+        FD_SET(sock, &write_fds);
+        FD_SET(sock, &except_fds);
+
         struct timeval tv = {.tv_sec = 10, .tv_usec = 0};
-        if (select(1, &read_fds, &write_fds, &except_fds, &tv) > -1)
+        if (select(sock + 1, &read_fds, &write_fds, &except_fds, &tv) > -1)
         {
             if (FD_ISSET(sock, &read_fds) && (state == REQUEST))
             {
@@ -104,16 +140,21 @@ static void client_function(void *arg)
                                 strerror(errno));
                         break;
                     };
+#ifdef DEBUG
+                    fprintf(stderr, "recv: %s\n", recv_buff);
+#endif
                     ring_buffer_queue_arr(&recv_ring_buffer, recv_buff, count);
                 }
             }
-            if (FD_ISSET(sock, &write_fds) && state == RESPONSE)
+            if (FD_ISSET(sock, &write_fds) && (state == RESPONSE))
             {
                 // we can write
                 size_t count = ring_buffer_num_items(&send_ring_buffer);
+                count += 2;
                 char send_arr[count];
-                memset(send_arr, 0, sizeof(char));
+                memset(send_arr, 0, sizeof(char) * count);
                 ring_buffer_dequeue_arr(&send_ring_buffer, send_arr, count);
+                sprintf(send_arr, "%s\r\n", send_arr);
                 if (send(sock, send_arr, count, 0) == -1)
                 {
                     fprintf(stderr, "send return -1, error is %s\n",
@@ -127,6 +168,13 @@ static void client_function(void *arg)
                 if (--fail_count <= 0)
                     break;
             }
+            // timeout
+            if ((tv.tv_sec == 0) && (tv.tv_usec == 0))
+            {
+                if (--fail_count <= 0)
+                    break;
+                continue;
+            }
         }
 
         size_t size = 0;
@@ -134,20 +182,20 @@ static void client_function(void *arg)
         if (!ring_buffer_is_empty(&recv_ring_buffer))
         {
             char data = 0xff;
-            while (ring_buffer_num_items > size)
+            while (ring_buffer_num_items(&recv_ring_buffer) > size)
             {
                 ring_buffer_peek(&recv_ring_buffer, &data, size++);
-                if (data == '\0')
+                if (data == '\n')
                 {
                     terminator_found = true;
                     break;
                 }
             }
         }
-        char state_args[size];
+        char state_args[size + 1];
         if (terminator_found)
         {
-            memset(state_args, 0, sizeof(char));
+            memset(state_args, 0, size * sizeof(char) + 1);
             ring_buffer_dequeue_arr(&recv_ring_buffer, state_args, size);
         }
         char *response = run_state_machine(&state, terminator_found ? state_args : NULL);
@@ -156,14 +204,8 @@ static void client_function(void *arg)
             ring_buffer_queue_arr(&send_ring_buffer, response, strlen(response));
             free(response);
         }
-        // timeout
-        if ((tv.tv_sec == 0) && (tv.tv_usec == 0))
-        {
-            if (--fail_count <= 0)
-                break;
-            continue;
-        }
     }
+    close(sock);
     pthread_exit((void *)0);
 }
 
@@ -179,14 +221,23 @@ int init_telnet_server(void)
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     if (bind(sock, (void *)&addr, sizeof(addr)))
         perror("binding tcp socket");
-    if (listen(sock, 1) == -1)
+    if (listen(sock, MAX_CONNECTIONS) == -1)
         perror("listen");
     int client_sock = -1;
     struct sockaddr client_sock_addr = {0};
-    while (client_sock = accept(sock, &client_sock_addr, sizeof(client_sock_addr))) {
-        pthread_t client = 0;
-        pthread_create(&client, NULL, client_function, (void *)client_sock);
-        pthread_detach(client);
+    socklen_t client_sock_addr_len = (socklen_t)sizeof(client_sock_addr);
+    while (client_sock = accept(sock, &client_sock_addr, &client_sock_addr_len))
+    {
+        if (client_sock > -1)
+        {
+            pthread_t client = 0;
+            pthread_create(&client, NULL, client_function, (void *)&client_sock);
+            pthread_detach(client);
+        }
+#ifdef DEBUG
+        else
+            perror("accept return -1");
+#endif
     }
     return 0;
 }
