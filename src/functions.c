@@ -277,6 +277,7 @@ char *read_byte(char *args)
     char *result = NULL;
     void *ptr = NULL;
     char *arg = strtok(args, " ");
+    enum emode mode = 0;
     if (arg != NULL)
     {
         ptr = get_ptr_from_string(arg);
@@ -285,7 +286,7 @@ char *read_byte(char *args)
     if (ptr != NULL)
     {
         val = *((unsigned char *)ptr);
-        size_t str_len = snprintf(NULL, 0, "%p: %hhu", ptr, val);
+        size_t str_len = snprintf(NULL, 0, "%s(%p) = %hhu", arg, ptr, val);
         result = (char *)calloc(str_len, sizeof(char));
     }
     if (result != NULL)

@@ -209,12 +209,12 @@ static void client_function(void *arg)
     pthread_exit((void *)0);
 }
 
-int init_telnet_server(void)
+int init_telnet_server(int port)
 {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {.sin_addr.s_addr = INADDR_ANY,
                                .sin_family = AF_INET,
-                               .sin_port = htons(PORT)};
+                               .sin_port = (port > -1) ? htons(port) : htons(PORT)};
     if (sock < 0)
         perror("opening socket");
     int optval = 1;

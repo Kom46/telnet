@@ -1,6 +1,7 @@
 // #ifdef TEST
 
 // #include "unity.h"
+#include <stdio.h>
 
 #include "libdebug.h"
 
@@ -11,7 +12,13 @@ unsigned char export_mem[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
 int main(int argc, char *argv[])
 {
-    init_telnet_server();
+    int port = -1;
+    if (argc > 1)
+    {
+        sscanf(argv[1], "%d", &port);
+    }
+    
+    init_telnet_server(port);
     for (;;)
     {
     }
