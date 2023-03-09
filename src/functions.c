@@ -64,16 +64,16 @@ static inline void *get_ptr_from_string(char *ptr_string)
 
 char *memory_dump(char *args)
 {
-    char *result = NULL;
-    char *arg = NULL;
 #define EIGHT_CELLS_PATTERN "0x%02x, 0x%02x, 0x%02x, 0x%02x 0x%02x, 0x%02x, 0x%02x, 0x%02x, // %c%c%c%c%c%c%c%c\r\n"
 #define ONE_SELL_PATTERN ", 0x%02x // %c%c%c%c%c%c%c\r\n,"
-#define EIHT_SELL_DATA(data, i) data[(i)], data[(i) + 1], data[(i) + 2], data[(i) + 3], data[(i) + 4], data[(i) + 5], \
-                                data[(i) + 6], data[(i) + 7]
+#define EIGHT_SELL_DATA(data, i) data[(i)], data[(i) + 1], data[(i) + 2], data[(i) + 3], data[(i) + 4], data[(i) + 5], \
+                                 data[(i) + 6], data[(i) + 7]
 #define CHAR_PRINT(a) ((a) >= 32 ? a : ' ')
 #define EIGHT_CHAR_PRINT(data, i) CHAR_PRINT(data[(i)]), CHAR_PRINT(data[(i) + 1]), CHAR_PRINT(data[(i + 2)]),     \
-                                  CHAR_PRINT(data[(i) + 3]), CHAR_PRINT(data[(i) + 4]), CHAR_PRINT(data[(i) + 5]), \
-                                  CHAR_PRINT(data[(i) + 6]), CHAR_PRINT(data[(i) + 7])
+                                   CHAR_PRINT(data[(i) + 3]), CHAR_PRINT(data[(i) + 4]), CHAR_PRINT(data[(i) + 5]), \
+                                   CHAR_PRINT(data[(i) + 6]), CHAR_PRINT(data[(i) + 7])
+    char *result = NULL;
+    char *arg = NULL;
     if ((arg = strtok(args, " ")) != NULL)
     {
         char *char_ptr = NULL;
@@ -88,8 +88,8 @@ char *memory_dump(char *args)
             memcpy(mem, ptr, count);
             // calculate size
             size_t size = 0;
-            size += snprintf(NULL, 0, EIGHT_CELLS_PATTERN, 0, 0, 0, 0, 0, 0, 0, 0, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a') * (count / 4);
-            size += (snprintf(NULL, 0, " 0x%02x,", 00) * count % 4) + snprintf(NULL, 0, " // %c%c%c%c%c%c%c", 'a', 'a', 'a', 'a');
+            size += snprintf(NULL, 0, EIGHT_CELLS_PATTERN, 0, 0, 0, 0, 0, 0, 0, 0, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a') * (count / 8);
+            size += (snprintf(NULL, 0, ", 0x%02x ", 00) * (count % 8)) + snprintf(NULL, 0, " // %c%c%c%c%c%c%c\r\n", 'a', 'a', 'a', 'a');
             // for final \r\n
             size += 2;
             result = (char *)calloc(size, sizeof(char));
@@ -99,16 +99,20 @@ char *memory_dump(char *args)
 
                 if (counter >= 8)
                 {
-                    char tmp[snprintf(NULL, 0, EIGHT_CELLS_PATTERN)];
-                    sprintf(tmp, EIGHT_CELLS_PATTERN, EIHT_SELL_DATA(mem, i), EIGHT_CHAR_PRINT(mem, i));
+                    size_t tmp_size = snprintf(NULL, 0, EIGHT_CELLS_PATTERN, EIGHT_SELL_DATA(mem, i), EIGHT_CHAR_PRINT(mem, i));
+                    char tmp[tmp_size];
+                    bzero(tmp, tmp_size);
+                    sprintf(tmp, EIGHT_CELLS_PATTERN, EIGHT_SELL_DATA(mem, i), EIGHT_CHAR_PRINT(mem, i));
                     strcat(result, tmp);
                 }
                 else
                 {
                     for (size_t j = 0; j < (count % 8); j++)
                     {
-                        char tmp[snprintf(NULL, 0, ONE_SELL_PATTERN)];
-                        static char tmp2[7] = {0};
+                        size_t tmp_size = snprintf(NULL, 0, ONE_SELL_PATTERN, 00, 'a', 'a', 'a', 'a', 'a', 'a', 'a');
+                        char tmp[tmp_size];
+                        bzero(tmp,tmp_size);
+                        static char tmp2[8] = {0};
                         tmp2[j] = CHAR_PRINT(mem[i + j]);
                         if (j == 0)
                         {
@@ -253,12 +257,12 @@ char *write_func(char *args)
     int size = 0;
     while ((arg = strtok(NULL, " ")) != NULL)
     {
-        mem = (unsigned long *)realloc(mem, ++size * sizeof(unsigned char));
+        mem = (unsigned char *)realloc(mem, ++size * sizeof(unsigned char));
         if (mem == NULL)
             break;
         char *char_ptr = NULL;
         int base = 0;
-        unsigned long val = (unsigned long)strtoul(arg, &char_ptr, base);
+        unsigned char val = (unsigned char)strtoul(arg, &char_ptr, base);
         if (mem != NULL)
         {
             mem[size - 1] = val;
@@ -827,7 +831,7 @@ char *run_func(char *args)
             }
             break;
         case 4:
-            for (size_t i = 0; i < args_count; i++)
+            for (int i = 0; i < args_count; i++)
             {
                 if (!strstr(sep_args[i], "\""))
                 {
@@ -908,7 +912,7 @@ char *run_func(char *args)
             }
             break;
         case 5:
-            for (size_t i = 0; i < args_count; i++)
+            for (int i = 0; i < args_count; i++)
             {
                 if (!strstr(sep_args[i], "\""))
                 {
@@ -1104,7 +1108,7 @@ char *run_func(char *args)
 function_callback_t get_func_by_name(char *name)
 {
     function_callback_t result = NULL;
-    for (int i = 0; i < ARRAY_SIZE(func_table); i++)
+    for (unsigned long i = 0; i < ARRAY_SIZE(func_table); i++)
     {
         if (!strcmp(name, func_table[i].func_name))
         {

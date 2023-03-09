@@ -15,6 +15,7 @@
     char * read_halfword(char *args);
     char * read_word(char *args);
     char * resolve_symbol(char *args);
+    char * resolve_function(char *args);
     char * run_func(char *args);
 #endif
 

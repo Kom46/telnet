@@ -36,10 +36,9 @@
     - -:test/support
   :source:
     - src/**
-    - external_libs/ring_buffer/**
+    - external_libs/**
   :include:
     - inc/**
-    - inc/internals/**
   :support:
     - test/support
   :libraries: []
@@ -107,6 +106,14 @@
   :test: []
   :release: []
 
+:test_runner:
+  # :cmdline_args: true
+
+:module_generator:
+  :project_root: ./
+  :source_root: src/
+  :inc_root: inc/
+  :test_root: test/
 
 :plugins:
   :load_paths:
